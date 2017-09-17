@@ -1,6 +1,7 @@
 package com.github.paolorotolo.appintro;
 
 import android.animation.ArgbEvaluator;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Vibrator;
@@ -50,6 +51,7 @@ public abstract class AppIntroBase extends AppCompatActivity implements
             "com.github.paolorotolo.appintro_immersive_mode_sticky";
     private static final String INSTANCE_DATA_COLOR_TRANSITIONS_ENABLED =
             "com.github.paolorotolo.appintro_color_transitions_enabled";
+    public static final int PROMISE_TIMEOUT = 15;
     protected final List<Fragment> fragments = new Vector<>();
     private final ArgbEvaluator argbEvaluator = new ArgbEvaluator();
     protected PagerAdapter mPagerAdapter;
@@ -317,11 +319,26 @@ public abstract class AppIntroBase extends AppCompatActivity implements
     private void handleIllegalSlideChangeAttempt() {
         Fragment currentFragment = mPagerAdapter.getItem(pager.getCurrentItem());
 
-        if (currentFragment != null && currentFragment instanceof ISlidePolicy) {
-            ISlidePolicy slide = (ISlidePolicy) currentFragment;
+        if (currentFragment != null) {
+            if (currentFragment instanceof ISlidePolicy) {
+                ISlidePolicy slide = (ISlidePolicy) currentFragment;
 
-            if (!slide.isPolicyRespected()) {
-                slide.onUserIllegallyRequestedNextPage();
+                if (!slide.isPolicyRespected()) {
+                    slide.onUserIllegallyRequestedNextPage();
+                }
+            } else if (currentFragment instanceof ISlidePromisePolicy) {
+                ISlidePromisePolicy slide = (ISlidePromisePolicy) currentFragment;
+
+                Boolean isPolicyRespected = false;
+                try {
+                    isPolicyRespected = slide.isPolicyRespected().call();
+                } catch (Exception e) {
+                    Log.e(TAG, "Could't finish isPolicyRespected Callable::call!", e);
+                }
+
+                if (!isPolicyRespected) {
+                    slide.onUserIllegallyRequestedNextPage();
+                }
             }
         }
     }
@@ -346,6 +363,23 @@ public abstract class AppIntroBase extends AppCompatActivity implements
 
             // Check if policy is fulfilled
             if (!slide.isPolicyRespected()) {
+                LogHelper.d(TAG, "Slide policy not respected, denying change request.");
+                return false;
+            }
+        } else if (currentFragment instanceof ISlidePromisePolicy) {
+            ISlidePromisePolicy slide = (ISlidePromisePolicy) currentFragment;
+
+            LogHelper.d(TAG, "Current fragment implements ISlidePromisePolicy.");
+
+            // Check if policy is fulfilled
+            Boolean isPolicyRespected = false;
+            try {
+                isPolicyRespected = slide.isPolicyRespected().call();
+            } catch (Exception e) {
+                Log.e(TAG, "Could't finish isPolicyRespected Callable::call!", e);
+            }
+
+            if (!isPolicyRespected) {
                 LogHelper.d(TAG, "Slide policy not respected, denying change request.");
                 return false;
             }
@@ -976,17 +1010,24 @@ public abstract class AppIntroBase extends AppCompatActivity implements
                 mVibrator.vibrate(vibrateIntensity);
             }
 
-            boolean isSlideChangingAllowed = handleBeforeSlideChanged();
+            new AsyncTask<Void, Void, Void>() {
+                @Override
+                protected Void doInBackground(Void... params) {
+                    boolean isSlideChangingAllowed = handleBeforeSlideChanged();
 
-            // Check if changing to the next slide is allowed
-            if (isSlideChangingAllowed) {
-                // Changing slide is handled by permission result
-                if (!checkAndRequestPermissions()) {
-                    changeSlide(false);
+                    // Check if changing to the next slide is allowed
+                    if (isSlideChangingAllowed) {
+                        // Changing slide is handled by permission result
+                        if (!checkAndRequestPermissions()) {
+                            changeSlide(false);
+                        }
+                    } else {
+                        handleIllegalSlideChangeAttempt();
+                    }
+
+                    return null;
                 }
-            } else {
-                handleIllegalSlideChangeAttempt();
-            }
+            }.execute();
         }
     }
 
