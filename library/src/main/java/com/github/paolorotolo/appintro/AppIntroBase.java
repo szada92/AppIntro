@@ -4,6 +4,8 @@ import android.animation.ArgbEvaluator;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Vibrator;
 import android.support.annotation.ColorRes;
 import android.support.annotation.NonNull;
@@ -321,13 +323,21 @@ public abstract class AppIntroBase extends AppCompatActivity implements
 
         if (currentFragment != null) {
             if (currentFragment instanceof ISlidePolicy) {
-                ISlidePolicy slide = (ISlidePolicy) currentFragment;
+                final ISlidePolicy slide = (ISlidePolicy) currentFragment;
 
                 if (!slide.isPolicyRespected()) {
-                    slide.onUserIllegallyRequestedNextPage();
+                    // Run on the UI thread
+                    Handler handler = new Handler(Looper.getMainLooper());
+                    handler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            slide.onUserIllegallyRequestedNextPage();
+                        }
+                    });
                 }
             } else if (currentFragment instanceof ISlidePromisePolicy) {
-                ISlidePromisePolicy slide = (ISlidePromisePolicy) currentFragment;
+
+                final ISlidePromisePolicy slide = (ISlidePromisePolicy) currentFragment;
 
                 Boolean isPolicyRespected = false;
                 try {
@@ -337,7 +347,14 @@ public abstract class AppIntroBase extends AppCompatActivity implements
                 }
 
                 if (!isPolicyRespected) {
-                    slide.onUserIllegallyRequestedNextPage();
+                    // Run on the UI thread
+                    Handler handler = new Handler(Looper.getMainLooper());
+                    handler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            slide.onUserIllegallyRequestedNextPage();
+                        }
+                    });
                 }
             }
         }
@@ -931,7 +948,7 @@ public abstract class AppIntroBase extends AppCompatActivity implements
         }
     }
 
-    private void changeSlide(boolean isLastSlide){
+    private void changeSlide(boolean isLastSlide) {
         if (isLastSlide) {
             Fragment currentFragment = mPagerAdapter.getItem(pager.getCurrentItem());
             handleSlideChanged(currentFragment, null);
@@ -943,7 +960,7 @@ public abstract class AppIntroBase extends AppCompatActivity implements
     }
 
     // Returns true if a permission has been requested
-    private boolean checkAndRequestPermissions(){
+    private boolean checkAndRequestPermissions() {
         if (!permissionsArray.isEmpty()) {
             boolean requestPermission = false;
             int permissionPosition = 0;
@@ -988,7 +1005,7 @@ public abstract class AppIntroBase extends AppCompatActivity implements
         switch (requestCode) {
             case PERMISSIONS_REQUEST_ALL_PERMISSIONS:
                 // Check if next slide is the last one
-                if (pager.getCurrentItem()+1 == slidesNumber) {
+                if (pager.getCurrentItem() + 1 == slidesNumber) {
                     changeSlide(true);
                 } else {
                     changeSlide(false);
@@ -1019,7 +1036,14 @@ public abstract class AppIntroBase extends AppCompatActivity implements
                     if (isSlideChangingAllowed) {
                         // Changing slide is handled by permission result
                         if (!checkAndRequestPermissions()) {
-                            changeSlide(false);
+                            // Run on the UI thread
+                            Handler handler = new Handler(Looper.getMainLooper());
+                            handler.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    changeSlide(false);
+                                }
+                            });
                         }
                     } else {
                         handleIllegalSlideChangeAttempt();
